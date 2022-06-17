@@ -1,0 +1,104 @@
+---
+title: "Developing models to predict cytotoxicity of metal nanoparticles"
+author: "TXT"
+date: "12/1/2021"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup R packages for model development
+
+After installing R and RStudio, open RStudio and run the following codes to install and load necessary packages for developing models and making web applications::
+
+```{r}
+packages <- c("svDialogs", "data.table", "data.table", "openxlsx", "mlbench", "caret", 
+              "tools", "DT", "magrittr", "ggplot2", "nortest", "tseries", "stringr", 
+              "RcmdrMisc", "lmtest", "dplyr", "randomForest", "shiny", "shinydashboard")
+
+install.packages(setdiff(packages, rownames(installed.packages())))
+
+library(svDialogs) 
+library(data.table)
+library(openxlsx)
+library(mlbench)
+library(caret)
+library(tools)
+library(DT)
+library(ggplot2)
+library(car)
+library(nortest)
+library(tseries)
+library(RcmdrMisc)
+library(lmtest)
+library(dplyr)
+library(randomForest)
+```
+
+Developing models for predicting cytotoxicity of metal nanoparticles
+
+Choose excel file containing dataset and read the dataset:
+```{r}
+DataMetal <- read.xlsx("MetalESN.xlsx", sheet = 1, startRow = 1, colNames = TRUE,
+                       rowNames = FALSE, detectDates = FALSE, skipEmptyRows = TRUE,
+                       skipEmptyCols = TRUE, rows = NULL, cols = NULL, 
+                       check.names = FALSE, namedRegion = NULL, 
+                       na.strings = "NA", fillMergedCells = FALSE)
+
+DataMetal <- select(DataMetal, c("Toxicity",
+                                 "Dose",
+                                 "Assay",
+                                 "Time",
+                                 "Species",
+                                 "Cancer",
+                                 "Cell_Tissue",
+                                 "Cell_line",
+                                 "SSA",
+                                 "Zeta",
+                                 "HSize",
+                                 "CoreSize",
+                                 "Coating",
+                                 "Shape",
+                                 "Metal"))
+```
+
+Split data into training and test set (70/30)
+```{r}
+set.seed(1991)
+split_size <- floor(0.70 * nrow(DataMetal))
+in_rows <- sample(c(1:nrow(DataMetal)), size = split_size, replace = FALSE)
+train <- DataMetal[in_rows, ]
+test <- DataMetal[-in_rows, ]
+```
+
+Train Random Forest model:
+```{r}
+train.control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+RFmodel <- train(Toxicity ~ ., data = train, method = "rf", ntree = 100, trControl = train.control)
+print(RFmodel)
+```
+
+Use RFmodel to predict test set:
+```{r}
+predictions <- RFmodel %>% predict(test); predictions_train <- RFmodel %>% predict(train)
+
+```
+
+Get confusion matrix and performance of model:
+```{r}
+CMatrix <- confusionMatrix(predictions, as.factor(test$Toxicity))
+Performance <- data.frame(Parameter = row.names(as.data.frame(CMatrix$byClass)),
+                          Value = as.data.frame(CMatrix$byClass))
+colnames(Performance) <- c("Parameters", "Values")
+CMatrix
+Performance
+```
+
+Save data and models for later use in web application:
+```{r}
+save(RFmodel, file = "RFmodel.RData")
+```
